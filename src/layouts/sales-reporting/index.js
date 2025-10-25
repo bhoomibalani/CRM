@@ -267,9 +267,7 @@ function SalesReporting() {
             errors.client_name = 'Client name is required';
         }
 
-        if (!formData.client_email || !formData.client_email.trim()) {
-            errors.client_email = 'Client email is required';
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.client_email)) {
+        if (formData.client_email && formData.client_email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.client_email)) {
             errors.client_email = 'Please enter a valid email address';
         }
 
@@ -281,9 +279,7 @@ function SalesReporting() {
             errors.new_order = 'New order selection is required';
         }
 
-        if (formData.new_order && (!formData.order_value || formData.order_value <= 0)) {
-            errors.order_value = 'Order value is required for new orders';
-        }
+        // Order value is now optional - no validation required
 
         if (!formData.visit_photo) {
             errors.visit_photo = 'Visit photo is required';
@@ -601,7 +597,7 @@ function SalesReporting() {
                         <Grid item xs={12} md={6}>
                             <MDInput
                                 fullWidth
-                                label="Client Email *"
+                                label="Client Email (Optional)"
                                 type="email"
                                 value={formData.client_email}
                                 onChange={(e) => handleInputChange('client_email', e.target.value)}
@@ -645,12 +641,12 @@ function SalesReporting() {
                         <Grid item xs={12} md={6}>
                             <MDInput
                                 fullWidth
-                                label={formData.new_order ? "Order Value (₹) *" : "Order Value (₹)"}
+                                label="Order Value (₹) (Optional)"
                                 type="number"
                                 value={formData.order_value}
                                 onChange={(e) => handleInputChange('order_value', e.target.value)}
                                 error={!!formErrors.order_value}
-                                helperText={formErrors.order_value || (!formData.new_order ? "Select 'Yes' for New Order to enable this field" : "Enter the order value")}
+                                helperText={!formData.new_order ? "Select 'Yes' for New Order to enable this field" : "Enter the order value (optional)"}
                                 placeholder="Enter order value"
                                 disabled={!formData.new_order}
                             />
@@ -769,18 +765,21 @@ function SalesReporting() {
             </Dialog>
 
             {/* Success/Error Snackbar */}
-            <MDSnackbar
-                color={success ? "success" : "error"}
-                icon={success ? "check" : "warning"}
-                title={success ? "Success" : "Error"}
-                content={success || error}
-                open={!!(success || error)}
-                close={() => {
-                    setSuccess(null);
-                    setError(null);
-                }}
-                autoHideDuration={5000}
-            />
+            {(success || error) && (
+                <MDSnackbar
+                    color={success ? "success" : "error"}
+                    icon={success ? "check" : "warning"}
+                    title={success ? "Success" : "Error"}
+                    content={success || error}
+                    open={!!(success || error)}
+                    close={() => {
+                        setSuccess(null);
+                        setError(null);
+                    }}
+                    autoHideDuration={5000}
+                    dateTime={new Date().toLocaleString()}
+                />
+            )}
         </DashboardLayout>
     );
 }

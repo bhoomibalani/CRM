@@ -55,6 +55,7 @@ import AttendanceSheet from "layouts/attendance-sheet";
 import CRMSignIn from "layouts/authentication/crm-sign-in";
 import SalesReporting from "layouts/sales-reporting";
 import SalesReports from "layouts/sales-reports";
+import ClientPaymentReport from "layouts/client-payment-report";
 
 // Components
 import RoleBasedRoute from "components/RoleBasedRoute";
@@ -194,6 +195,19 @@ const routes = [
     component: (
       <RoleBasedRoute requiredRoles={["admin", "office"]}>
         <SalesReports />
+      </RoleBasedRoute>
+    ),
+  },
+  {
+    type: "collapse",
+    name: "Client Payment Report",
+    key: "client-payment-report",
+    icon: <Icon fontSize="small">payment</Icon>,
+    route: "/client-payment-report",
+    requiredRoles: ["client", "admin", "manager", "office"],
+    component: (
+      <RoleBasedRoute requiredRoles={["client", "admin", "manager", "office"]}>
+        <ClientPaymentReport />
       </RoleBasedRoute>
     ),
   },

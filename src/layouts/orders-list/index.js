@@ -58,21 +58,26 @@ function OrdersList() {
     customer_name: "",
     customer_email: "",
     customer_phone: "",
-    product_name: "",
-    quantity: "",
-    unit_price: "",
-    total_amount: "",
     order_date: new Date().toISOString().split("T")[0],
     delivery_date: "",
     status: "pending",
     notes: "",
   });
+
+  const [products, setProducts] = useState([
+    { product_name: "", quantity: "", unit_price: "", total_amount: "" }
+  ]);
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchFilter, setSearchFilter] = useState("all");
+  const [expandedOrder, setExpandedOrder] = useState(null);
 
   const openMenu = (event) => setMenu(event.currentTarget);
   const closeMenu = () => setMenu(null);
+
+  const toggleExpandedOrder = (orderId) => {
+    setExpandedOrder(expandedOrder === orderId ? null : orderId);
+  };
 
   const handleOpenDialog = () => {
     setOpenDialog(true);
@@ -101,48 +106,94 @@ function OrdersList() {
       ...prev,
       [name]: value,
     }));
+  };
+
+  const handleProductChange = (index, field, value) => {
+    const updatedProducts = [...products];
+    updatedProducts[index] = {
+      ...updatedProducts[index],
+      [field]: value,
+    };
 
     // Auto-calculate total amount when quantity or unit_price changes
-    if (name === "quantity" || name === "unit_price") {
-      const quantity =
-        name === "quantity" ? parseFloat(value) || 0 : parseFloat(formData.quantity) || 0;
-      const unitPrice =
-        name === "unit_price" ? parseFloat(value) || 0 : parseFloat(formData.unit_price) || 0;
+    if (field === "quantity" || field === "unit_price") {
+      const quantity = field === "quantity" ? parseFloat(value) || 0 : parseFloat(updatedProducts[index].quantity) || 0;
+      const unitPrice = field === "unit_price" ? parseFloat(value) || 0 : parseFloat(updatedProducts[index].unit_price) || 0;
       const total = quantity * unitPrice;
-      setFormData((prev) => ({
-        ...prev,
-        total_amount: total > 0 ? total.toString() : "",
-      }));
+      updatedProducts[index].total_amount = total > 0 ? total.toString() : "";
+    }
+
+    setProducts(updatedProducts);
+  };
+
+  const addProduct = () => {
+    if (products.length < 15) {
+      setProducts([...products, { product_name: "", quantity: "", unit_price: "", total_amount: "" }]);
+    }
+  };
+
+  const removeProduct = (index) => {
+    if (products.length > 1) {
+      setProducts(products.filter((_, i) => i !== index));
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
+    setError(null);
 
     try {
+      // Validate products
+      const validProducts = products.filter(p => p.product_name && p.quantity && p.unit_price);
+      if (validProducts.length === 0) {
+        setError("Please add at least one product");
+        setSubmitting(false);
+        return;
+      }
+
+      const orderData = {
+        ...formData,
+        products: validProducts,
+        total_amount: validProducts.reduce((sum, p) => sum + (parseFloat(p.total_amount) || 0), 0)
+      };
+
+      console.log("Creating order with data:", orderData);
+      console.log("API URL:", getApiUrl(API_CONFIG.ENDPOINTS.ORDERS));
+
       const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.ORDERS), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(orderData),
       });
 
+      console.log("Response status:", response.status);
+      console.log("Response headers:", response.headers);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("HTTP Error:", response.status, errorText);
+        setError(`Server error (${response.status}): ${errorText}`);
+        return;
+      }
+
       const data = await response.json();
+      console.log("Response data:", data);
 
       if (data.success) {
         // Refresh orders list
         await fetchOrders();
         handleCloseDialog();
-        // You could add a success notification here
+        setError(null);
       } else {
         setError(data.message || "Failed to create order");
       }
     } catch (err) {
-      setError("Network error. Please check your connection.");
-      console.error("Error creating order:", err);
+      console.error("Network error details:", err);
+      setError(`Network error: ${err.message}. Please check if the backend server is running on http://127.0.0.1:8000`);
     } finally {
       setSubmitting(false);
     }
@@ -249,9 +300,42 @@ function OrdersList() {
       </MDTypography>
     ),
     order_details: (
-      <MDTypography variant="caption" color="text" fontWeight="medium">
-        {order.order_details}
-      </MDTypography>
+      <MDBox>
+        <MDTypography
+          variant="caption"
+          color="text"
+          fontWeight="medium"
+          sx={{ cursor: 'pointer', '&:hover': { color: 'primary.main' } }}
+          onClick={() => toggleExpandedOrder(order.id)}
+        >
+          {order.order_details} {order.product_count > 1 ? `(${order.product_count} products)` : ''}
+          <Icon sx={{ ml: 1, fontSize: '16px' }}>
+            {expandedOrder === order.id ? 'expand_less' : 'expand_more'}
+          </Icon>
+        </MDTypography>
+        {expandedOrder === order.id && order.items && order.items.length > 0 && (
+          <MDBox mt={1} ml={2}>
+            {order.items.map((item, index) => (
+              <MDBox key={index} display="flex" justifyContent="space-between" alignItems="center" py={0.5}>
+                <MDTypography variant="caption" color="text" fontWeight="medium">
+                  {item.product_name} (Qty: {item.quantity})
+                </MDTypography>
+                <MDTypography variant="caption" color="text" fontWeight="bold">
+                  ₹{item.total_amount}
+                </MDTypography>
+              </MDBox>
+            ))}
+            <MDBox display="flex" justifyContent="space-between" alignItems="center" mt={1} pt={1} borderTop="1px solid" borderColor="grey.300">
+              <MDTypography variant="caption" color="text" fontWeight="bold">
+                Total Amount:
+              </MDTypography>
+              <MDTypography variant="caption" color="primary" fontWeight="bold">
+                ₹{order.total_amount}
+              </MDTypography>
+            </MDBox>
+          </MDBox>
+        )}
+      </MDBox>
     ),
     status: (
       <MDTypography
@@ -428,12 +512,11 @@ function OrdersList() {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Customer Email"
+                  label="Customer Email (Optional)"
                   name="customer_email"
                   type="email"
                   value={formData.customer_email}
                   onChange={handleInputChange}
-                  required
                   margin="normal"
                 />
               </Grid>
@@ -447,57 +530,94 @@ function OrdersList() {
                   margin="normal"
                 />
               </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Product Name"
-                  name="product_name"
-                  value={formData.product_name}
-                  onChange={handleInputChange}
-                  required
-                  margin="normal"
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  fullWidth
-                  label="Quantity"
-                  name="quantity"
-                  type="number"
-                  value={formData.quantity}
-                  onChange={handleInputChange}
-                  required
-                  margin="normal"
-                  inputProps={{ min: 1 }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  fullWidth
-                  label="Unit Price"
-                  name="unit_price"
-                  type="number"
-                  step="0.01"
-                  value={formData.unit_price}
-                  onChange={handleInputChange}
-                  required
-                  margin="normal"
-                  inputProps={{ min: 0 }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  fullWidth
-                  label="Total Amount"
-                  name="total_amount"
-                  type="number"
-                  step="0.01"
-                  value={formData.total_amount}
-                  onChange={handleInputChange}
-                  required
-                  margin="normal"
-                  inputProps={{ min: 0 }}
-                />
+              {/* Products Section */}
+              <Grid item xs={12}>
+                <MDTypography variant="h6" fontWeight="medium" mb={2}>
+                  Products ({products.length}/15)
+                </MDTypography>
+                {products.map((product, index) => (
+                  <Card key={index} sx={{ mb: 2, p: 2 }}>
+                    <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                      <MDTypography variant="subtitle2" fontWeight="medium">
+                        Product {index + 1}
+                      </MDTypography>
+                      {products.length > 1 && (
+                        <MDButton
+                          variant="outlined"
+                          color="error"
+                          size="small"
+                          onClick={() => removeProduct(index)}
+                        >
+                          Remove
+                        </MDButton>
+                      )}
+                    </MDBox>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          fullWidth
+                          label="Product Name"
+                          value={product.product_name}
+                          onChange={(e) => handleProductChange(index, "product_name", e.target.value)}
+                          required
+                          margin="normal"
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={2}>
+                        <TextField
+                          fullWidth
+                          label="Quantity"
+                          type="number"
+                          value={product.quantity}
+                          onChange={(e) => handleProductChange(index, "quantity", e.target.value)}
+                          required
+                          margin="normal"
+                          inputProps={{ min: 1 }}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={2}>
+                        <TextField
+                          fullWidth
+                          label="Unit Price"
+                          type="number"
+                          step="0.01"
+                          value={product.unit_price}
+                          onChange={(e) => handleProductChange(index, "unit_price", e.target.value)}
+                          required
+                          margin="normal"
+                          inputProps={{ min: 0 }}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={2}>
+                        <TextField
+                          fullWidth
+                          label="Total"
+                          type="number"
+                          step="0.01"
+                          value={product.total_amount}
+                          disabled
+                          margin="normal"
+                        />
+                      </Grid>
+                    </Grid>
+                  </Card>
+                ))}
+                {products.length < 15 && (
+                  <MDButton
+                    variant="outlined"
+                    color="info"
+                    onClick={addProduct}
+                    startIcon={<Icon>add</Icon>}
+                    sx={{ mb: 2 }}
+                  >
+                    Add Product
+                  </MDButton>
+                )}
+                {products.length >= 15 && (
+                  <MDTypography variant="caption" color="warning" display="block">
+                    Maximum 15 products reached
+                  </MDTypography>
+                )}
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField

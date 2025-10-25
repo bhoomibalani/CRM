@@ -8,6 +8,7 @@ use App\Http\Controllers\TaskController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\SalesController;
 use App\Http\Controllers\ledgerController;
+use App\Http\Controllers\ClientPaymentController;
 
 // Handle CORS preflight requests
 Route::options('{any}', function () {
@@ -78,6 +79,14 @@ Route::middleware('api.auth')->group(function () {
         Route::delete('/{id}', [ledgerController::class, 'destroy']);
         Route::post('/{id}/upload', [ledgerController::class, 'upload']);
         Route::get('/{id}/download', [ledgerController::class, 'download']);
+    });
+
+    // Client Payment routes (role-based access)
+    Route::prefix('client-payments')->group(function () {
+        Route::get('/', [ClientPaymentController::class, 'index']);
+        Route::post('/', [ClientPaymentController::class, 'store']);
+        Route::put('/{id}/status', [ClientPaymentController::class, 'updateStatus']);
+        Route::get('/sales-persons', [ClientPaymentController::class, 'getSalesPersons']);
     });
 });
 

@@ -22,6 +22,9 @@ export const API_CONFIG = {
     LEDGERS: "/api/ledgers",
     LEDGER_UPLOAD: "/api/ledgers/{id}/upload",
     LEDGER_DOWNLOAD: "/api/ledgers/{id}/download",
+    CLIENT_PAYMENTS: "/api/client-payments",
+    CLIENT_PAYMENT_STATUS: "/api/client-payments/{id}/status",
+    CLIENT_PAYMENT_SALES_PERSONS: "/api/client-payments/sales-persons",
   },
 };
 

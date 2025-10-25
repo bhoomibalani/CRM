@@ -87,12 +87,11 @@ function UserManagement() {
         }
         return null;
       case "email":
-        if (!value || value.trim().length === 0) {
-          return "Email is required";
-        }
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(value.trim())) {
-          return "Please enter a valid email address";
+        if (value && value.trim().length > 0) {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(value.trim())) {
+            return "Please enter a valid email address";
+          }
         }
         return null;
       case "password":
@@ -141,6 +140,9 @@ function UserManagement() {
     setError(null);
 
     try {
+      console.log("Creating user with data:", newUser);
+      console.log("API URL:", getApiUrl(API_CONFIG.ENDPOINTS.USERS));
+
       const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.USERS), {
         method: "POST",
         headers: {
@@ -150,17 +152,29 @@ function UserManagement() {
         body: JSON.stringify(newUser),
       });
 
+      console.log("Response status:", response.status);
+      console.log("Response headers:", response.headers);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("HTTP Error:", response.status, errorText);
+        setError(`Server error (${response.status}): ${errorText}`);
+        return;
+      }
+
       const data = await response.json();
+      console.log("Response data:", data);
 
       if (data.success) {
         closeAddDialog();
         await fetchUsers(); // Refresh the users list
+        setError(null);
       } else {
         setError(data.message || "Failed to create user");
       }
     } catch (err) {
-      setError("Network error while creating user");
-      console.error("Error creating user:", err);
+      console.error("Network error details:", err);
+      setError(`Network error: ${err.message}. Please check if the backend server is running on http://127.0.0.1:8000`);
     } finally {
       setIsSubmitting(false);
     }
@@ -394,7 +408,7 @@ function UserManagement() {
             <MDBox mb={2}>
               <MDInput
                 type="email"
-                placeholder="Email"
+                placeholder="Email (Optional)"
                 value={newUser.email}
                 onChange={(e) => updateField("email", e.target.value)}
                 fullWidth
