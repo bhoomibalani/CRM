@@ -17,6 +17,7 @@ export const API_CONFIG = {
     ATTENDANCE_END: "/api/attendance/end",
     ATTENDANCE_HISTORY: "/api/attendance/history",
     ATTENDANCE_ALL: "/api/attendance/all",
+    ATTENDANCE_OFFICE_LOCATION: "/api/attendance/office-location",
     SALES_REPORTS: "/api/sales/reports",
     SALES_UPLOAD_PHOTO: "/api/sales/upload-photo",
     LEDGERS: "/api/ledgers",

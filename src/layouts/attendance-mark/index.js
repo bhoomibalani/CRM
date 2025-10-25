@@ -12,6 +12,8 @@ import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
+import CircularProgress from "@mui/material/CircularProgress";
+import Box from "@mui/material/Box";
 
 // MD components
 import MDBox from "components/MDBox";
@@ -25,6 +27,9 @@ import DataTable from "examples/Tables/DataTable";
 // Context and config
 import { useAuth } from "contexts/AuthContext";
 import { API_CONFIG, getApiUrl } from "config/api";
+
+// Utils
+import { getCurrentLocation, requestLocationPermission } from "utils/locationUtils";
 
 const STATUS = {
     ACTIVE: "active",
@@ -40,14 +45,57 @@ function MarkAttendance() {
     const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
     const [currentTime, setCurrentTime] = useState(new Date());
     const [isTimeRestricted, setIsTimeRestricted] = useState(false);
+    const [locationLoading, setLocationLoading] = useState(false);
+    const [officeLocation, setOfficeLocation] = useState(null);
+    const [currentLocation, setCurrentLocation] = useState(null);
 
     const closeSnackbar = () => setSnackbar((s) => ({ ...s, open: false }));
 
-    // Check if current time is before 9:30 AM
+    // Get office location information
+    const getOfficeLocation = async () => {
+        try {
+            if (!token) return;
+            const res = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.ATTENDANCE_OFFICE_LOCATION), {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const data = await res.json();
+            if (data.success) {
+                setOfficeLocation(data.office_location);
+            }
+        } catch (e) {
+            console.error('Error fetching office location:', e);
+        }
+    };
+
+    // Get current location and validate
+    const getLocationAndValidate = async () => {
+        setLocationLoading(true);
+        try {
+            // First request permission
+            await requestLocationPermission();
+            
+            // Get current location
+            const location = await getCurrentLocation();
+            setCurrentLocation(location);
+            
+            return location;
+        } catch (error) {
+            setSnackbar({
+                open: true,
+                message: error.message,
+                severity: "error",
+            });
+            throw error;
+        } finally {
+            setLocationLoading(false);
+        }
+    };
+
+    // Check if current time is before 4:00 PM
     const checkTimeRestriction = () => {
         const now = new Date();
         const cutoffTime = new Date();
-        cutoffTime.setHours(9, 30, 0, 0);
+        cutoffTime.setHours(16, 0, 0, 0);
 
         setCurrentTime(now);
         setIsTimeRestricted(now > cutoffTime);
@@ -83,20 +131,41 @@ function MarkAttendance() {
         setLoading(true);
         try {
             if (!token) return;
+            
+            // Get current location
+            const location = await getLocationAndValidate();
+            
             const res = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.ATTENDANCE_START), {
                 method: "POST",
-                headers: { Authorization: `Bearer ${token}` },
+                headers: { 
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    latitude: location.latitude,
+                    longitude: location.longitude
+                })
             });
             const data = await res.json();
+            
+            let message = data.message || "";
+            if (data.success && data.location) {
+                message += ` (${data.location.distance_from_office}m from office)`;
+            }
+            
             setSnackbar({
                 open: true,
-                message: data.message || "",
+                message: message,
                 severity: data.success ? "success" : "error",
             });
             await getAttendanceStatus();
             await getAttendanceHistory();
         } catch (e) {
-            setSnackbar({ open: true, message: "Error starting attendance", severity: "error" });
+            setSnackbar({ 
+                open: true, 
+                message: e.message || "Error starting attendance", 
+                severity: "error" 
+            });
         } finally {
             setLoading(false);
         }
@@ -106,20 +175,41 @@ function MarkAttendance() {
         setLoading(true);
         try {
             if (!token) return;
+            
+            // Get current location
+            const location = await getLocationAndValidate();
+            
             const res = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.ATTENDANCE_END), {
                 method: "POST",
-                headers: { Authorization: `Bearer ${token}` },
+                headers: { 
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    latitude: location.latitude,
+                    longitude: location.longitude
+                })
             });
             const data = await res.json();
+            
+            let message = data.message || "";
+            if (data.success && data.location) {
+                message += ` (${data.location.distance_from_office}m from office)`;
+            }
+            
             setSnackbar({
                 open: true,
-                message: data.message || "",
+                message: message,
                 severity: data.success ? "success" : "error",
             });
             await getAttendanceStatus();
             await getAttendanceHistory();
         } catch (e) {
-            setSnackbar({ open: true, message: "Error ending attendance", severity: "error" });
+            setSnackbar({ 
+                open: true, 
+                message: e.message || "Error ending attendance", 
+                severity: "error" 
+            });
         } finally {
             setLoading(false);
         }
@@ -128,6 +218,7 @@ function MarkAttendance() {
     useEffect(() => {
         getAttendanceStatus();
         getAttendanceHistory();
+        getOfficeLocation();
         checkTimeRestriction();
 
         // Update time every minute
@@ -188,7 +279,17 @@ function MarkAttendance() {
                                         </MDTypography>
                                         {isTimeRestricted && (
                                             <MDTypography variant="caption" color="error" display="block">
-                                                ⚠️ Attendance can only be marked before 9:30 AM
+                                                ⚠️ Attendance can only be marked before 4:00 PM
+                                            </MDTypography>
+                                        )}
+                                        {officeLocation && (
+                                            <MDTypography variant="caption" color="text" display="block">
+                                                📍 Office: {officeLocation.latitude}, {officeLocation.longitude}
+                                            </MDTypography>
+                                        )}
+                                        {currentLocation && (
+                                            <MDTypography variant="caption" color="text" display="block">
+                                                📍 Your Location: {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)}
                                             </MDTypography>
                                         )}
                                     </MDBox>
@@ -201,9 +302,14 @@ function MarkAttendance() {
                                             color="success"
                                             size="small"
                                             onClick={startAttendance}
-                                            disabled={loading || isTimeRestricted}
+                                            disabled={loading || locationLoading || isTimeRestricted}
                                         >
-                                            <Icon>login</Icon>&nbsp;Check In
+                                            {locationLoading ? (
+                                                <CircularProgress size={16} color="inherit" />
+                                            ) : (
+                                                <Icon>login</Icon>
+                                            )}
+                                            &nbsp;{locationLoading ? 'Getting Location...' : 'Check In'}
                                         </Button>
                                     ) : attendanceStatus?.status === STATUS.ACTIVE ? (
                                         <Button
@@ -211,9 +317,14 @@ function MarkAttendance() {
                                             color="warning"
                                             size="small"
                                             onClick={endAttendance}
-                                            disabled={loading}
+                                            disabled={loading || locationLoading}
                                         >
-                                            <Icon>logout</Icon>&nbsp;Check Out
+                                            {locationLoading ? (
+                                                <CircularProgress size={16} color="inherit" />
+                                            ) : (
+                                                <Icon>logout</Icon>
+                                            )}
+                                            &nbsp;{locationLoading ? 'Getting Location...' : 'Check Out'}
                                         </Button>
                                     ) : (
                                         <Button variant="outlined" size="small" disabled>

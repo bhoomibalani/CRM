@@ -58,6 +58,7 @@ Route::middleware('api.auth')->group(function () {
         Route::get('/status', [AttendanceController::class, 'status']);
         Route::get('/history', [AttendanceController::class, 'history']);
         Route::get('/all', [AttendanceController::class, 'all']);
+        Route::get('/office-location', [AttendanceController::class, 'officeLocation']);
     });
 
     // Sales routes (admin, manager, sales, office)

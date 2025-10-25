@@ -4,11 +4,20 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Attendance;
+use App\Services\LocationService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 
 class AttendanceController extends Controller
 {
+    protected $locationService;
+
+    public function __construct(LocationService $locationService)
+    {
+        $this->locationService = $locationService;
+    }
+
     /**
      * Start attendance timer for the authenticated user
      */
@@ -25,15 +34,45 @@ class AttendanceController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
         }
 
+        // Validate location data
+        $validator = Validator::make($request->all(), [
+            'latitude' => 'required|numeric|between:-90,90',
+            'longitude' => 'required|numeric|between:-180,180'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Location data is required and must be valid coordinates',
+                'errors' => $validator->errors()
+            ], 400);
+        }
+
+        // Validate location proximity to office
+        $locationValidation = $this->locationService->validateLocation(
+            $request->latitude,
+            $request->longitude
+        );
+
+        if (!$locationValidation['valid']) {
+            return response()->json([
+                'success' => false,
+                'message' => $locationValidation['message'],
+                'distance' => $locationValidation['distance'],
+                'office_coordinates' => $this->locationService->getOfficeCoordinates(),
+                'max_distance' => $this->locationService->getMaxDistance()
+            ], 400);
+        }
+
         $today = Carbon::today('Asia/Kolkata');
         $currentTime = Carbon::now('Asia/Kolkata');
         
-        // Check if current time is before 9:30 AM
-        $cutoffTime = Carbon::createFromTime(9, 30, 0, 'Asia/Kolkata');
+        // Check if current time is before 4:00 PM
+        $cutoffTime = Carbon::createFromTime(16, 0, 0, 'Asia/Kolkata');
         if ($currentTime->gt($cutoffTime)) {
             return response()->json([
                 'success' => false, 
-                'message' => 'Attendance can only be marked before 9:30 AM. Current time: ' . $currentTime->format('H:i A')
+                'message' => 'Attendance can only be marked before 4:00 PM. Current time: ' . $currentTime->format('H:i A')
             ], 400);
         }
         
@@ -76,6 +115,11 @@ class AttendanceController extends Controller
             'user_id' => $user->id,
             'user_name' => $user->name,
             'start_time' => $attendance->start_time,
+            'location' => [
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+                'distance_from_office' => $locationValidation['distance']
+            ]
         ]);
 
         return response()->json([
@@ -85,6 +129,11 @@ class AttendanceController extends Controller
                 'id' => $attendance->id,
                 'start_time' => $attendance->start_time->format('Y-m-d H:i:s'),
                 'status' => $attendance->status,
+            ],
+            'location' => [
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+                'distance_from_office' => $locationValidation['distance']
             ]
         ]);
     }
@@ -103,6 +152,36 @@ class AttendanceController extends Controller
         
         if (!$user) {
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+        }
+
+        // Validate location data
+        $validator = Validator::make($request->all(), [
+            'latitude' => 'required|numeric|between:-90,90',
+            'longitude' => 'required|numeric|between:-180,180'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Location data is required and must be valid coordinates',
+                'errors' => $validator->errors()
+            ], 400);
+        }
+
+        // Validate location proximity to office
+        $locationValidation = $this->locationService->validateLocation(
+            $request->latitude,
+            $request->longitude
+        );
+
+        if (!$locationValidation['valid']) {
+            return response()->json([
+                'success' => false,
+                'message' => $locationValidation['message'],
+                'distance' => $locationValidation['distance'],
+                'office_coordinates' => $this->locationService->getOfficeCoordinates(),
+                'max_distance' => $this->locationService->getMaxDistance()
+            ], 400);
         }
 
         $today = Carbon::today('Asia/Kolkata');
@@ -138,6 +217,11 @@ class AttendanceController extends Controller
             'start_time' => $attendance->start_time,
             'end_time' => $attendance->end_time,
             'total_hours' => $attendance->formatted_total_hours,
+            'location' => [
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+                'distance_from_office' => $locationValidation['distance']
+            ]
         ]);
 
         return response()->json([
@@ -149,6 +233,11 @@ class AttendanceController extends Controller
                 'end_time' => $attendance->end_time->format('Y-m-d H:i:s'),
                 'total_hours' => $attendance->formatted_total_hours,
                 'status' => $attendance->status,
+            ],
+            'location' => [
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+                'distance_from_office' => $locationValidation['distance']
             ]
         ]);
     }
@@ -353,6 +442,18 @@ class AttendanceController extends Controller
         return response()->json([
             'success' => true,
             'attendances' => $attendances,
+        ]);
+    }
+
+    /**
+     * Get office location information
+     */
+    public function officeLocation()
+    {
+        return response()->json([
+            'success' => true,
+            'office_location' => $this->locationService->getOfficeCoordinates(),
+            'max_distance' => $this->locationService->getMaxDistance()
         ]);
     }
 }
